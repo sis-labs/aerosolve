@@ -43,7 +43,8 @@ object AdditiveModelTrainer {
                                    epsilon : Double,       // epsilon used in epsilon-insensitive loss for regression training
                                    initModelPath: String,
                                    linearFeatureFamilies: Array[String],
-                                   priors: Array[String])
+                                   priors: Array[String],
+                                   ndTreePath: String)
 
   def train(sc : SparkContext,
             input : RDD[Example],
@@ -91,8 +92,8 @@ object AdditiveModelTrainer {
       // Average the feature functions
       // Average the weights
       .mapValues(x => {
-      val scale = 1.0f / params.numBags.toFloat
-      aggregateFuncWeights(x, scale, params.numBins, params.smoothingTolerance.toFloat)
+        val scale = 1.0f / params.numBags.toFloat
+        aggregateFuncWeights(x, scale, params.numBins, params.smoothingTolerance.toFloat)
       })
       .collect()
       .foreach(entry => {
@@ -333,14 +334,12 @@ object AdditiveModelTrainer {
     }
   }
 
-  // Initializes the model
-  private def initModel(minCount : Int,
-                        params: AdditiveTrainerParams,
-                        examples : RDD[Example],
-                        model : AdditiveModel,
-                        overwrite : Boolean) = {
+  def initSplineFunctionModel(minCount : Int,
+                              params: AdditiveTrainerParams,
+                              examples : RDD[Example],
+                              model : AdditiveModel,
+                              overwrite : Boolean) = {
     val linearFeatureFamilies = params.linearFeatureFamilies
-    val priors = params.priors
     val minMax = TrainingUtils
       .getFeatureStatistics(minCount, examples)
       .filter(x => x._1._1 != params.rankKey)
@@ -350,13 +349,44 @@ object AdditiveModelTrainer {
     // add splines
     for (((featureFamily, featureName), stats) <- minMaxSpline) {
       val spline = new Spline(stats.min.toFloat, stats.max.toFloat, params.numBins)
-       model.addFunction(featureFamily, featureName, spline, overwrite)
+      model.addFunction(featureFamily, featureName, spline, overwrite)
     }
     // add linear
     for (((featureFamily, featureName), stats) <- minMaxLinear) {
       // set default linear function as f(x) = 0
       model.addFunction(featureFamily, featureName,
         new Linear(stats.min.toFloat, stats.min.toFloat), overwrite)
+    }
+  }
+
+  /*
+    string feature using linear, min/max = 1,
+    any other features use NDTree to build MultiDimensionSplineFunction
+   */
+  def initMultiDimensionSplineFunctionModel(minCount : Int,
+                                            params: AdditiveTrainerParams,
+                                            examples : RDD[Example],
+                                            model : AdditiveModel,
+                                            overwrite : Boolean) = {
+    // load NDTree
+
+    // filter minCount
+
+    // add spline
+    // add string(linear)
+    // add dense.
+  }
+
+  // Initializes the model
+  private def initModel(minCount : Int,
+                        params: AdditiveTrainerParams,
+                        examples : RDD[Example],
+                        model : AdditiveModel,
+                        overwrite : Boolean) = {
+    if (params.ndTreePath.isEmpty) {
+      initSplineFunctionModel(minCount, params, examples, model, overwrite)
+    } else {
+      initMultiDimensionSplineFunctionModel(minCount, params, examples, model, overwrite)
     }
   }
 
@@ -470,7 +500,8 @@ object AdditiveModelTrainer {
       epsilon,
       initModelPath,
       linearFeatureFamilies,
-      priors)
+      priors,
+      Try{config.getString("ndTree_path")}.getOrElse(""))
   }
 
   def trainAndSaveToFile(sc : SparkContext,

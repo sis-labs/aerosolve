@@ -238,7 +238,7 @@ public class AdditiveModel extends AbstractModel {
   public Map<String, Function> getOrCreateFeatureFamily(String featureFamily) {
     Map<String, Function> featFamily = weights.get(featureFamily);
     if (featFamily == null) {
-      featFamily = new HashMap<String, Function>();
+      featFamily = new HashMap<>();
       weights.put(featureFamily, featFamily);
     }
     return featFamily;

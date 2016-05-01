@@ -1,31 +1,22 @@
 package com.airbnb.aerosolve.training
 
-import java.io.BufferedWriter
-import java.io.InputStreamReader
-import java.io.BufferedReader
-import java.io.OutputStreamWriter
+import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter}
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
-import com.airbnb.aerosolve.core.Example
-import com.airbnb.aerosolve.core.FeatureVector
-import com.airbnb.aerosolve.core.util.Util
-import com.airbnb.aerosolve.core.util.StringDictionary
-import com.airbnb.aerosolve.core.models.AbstractModel
-import com.airbnb.aerosolve.core.models.ModelFactory
+import com.airbnb.aerosolve.core.{Example, FeatureVector}
+import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory}
 import com.airbnb.aerosolve.core.transforms.Transformer
+import com.airbnb.aerosolve.core.util.{StringDictionary, Util}
+import com.typesafe.config.Config
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-import org.slf4j.{LoggerFactory, Logger}
+import org.slf4j.{Logger, LoggerFactory}
 
-import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
-import com.typesafe.config.Config
-
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
 object TrainingUtils {
 
@@ -227,15 +218,15 @@ object TrainingUtils {
             familyMap._2.foreach(feature => {
               val key = (familyMap._1, feature._1)
               val curr = weights.getOrElse(key, FeatureStatistics(0, Double.MaxValue, -Double.MaxValue, 0.0, 0.0))
-                val v = feature._2
-                weights.put(key,
-                            FeatureStatistics(curr.count + 1,
-                             scala.math.min(curr.min, v),
-                             scala.math.max(curr.max, v),
-                             curr.mean + v, // actually the sum
-                             curr.variance + v * v) // actually the sum of squares
-                )
-              })
+              val v = feature._2
+              weights.put(key,
+                          FeatureStatistics(curr.count + 1,
+                           scala.math.min(curr.min, v),
+                           scala.math.max(curr.max, v),
+                           curr.mean + v, // actually the sum
+                           curr.variance + v * v) // actually the sum of squares
+              )
+            })
           })
         }
       })
