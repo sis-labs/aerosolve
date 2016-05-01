@@ -104,6 +104,11 @@ struct NDTreeNode {
   7: optional double splitValue;
 }
 
+// feature family : feature name : ndTree
+struct NDTreeMap {
+  1: optional map<string, map<string, list<NDTreeNode>>> ndTreeMap;
+}
+
 struct ModelRecord {
   1: optional ModelHeader modelHeader;
   // e.g. "geo"

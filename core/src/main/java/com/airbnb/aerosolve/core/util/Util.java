@@ -33,6 +33,15 @@ public class Util implements Serializable {
       return "";
     }
   }
+
+  public static void save(BufferedWriter writer, TBase obj) throws IOException {
+    writer.write(Util.encode(obj));
+  }
+
+  public static <T extends TBase> T load(Class<T> clazz, BufferedReader reader) throws IOException {
+    return decode(clazz, reader.readLine());
+  }
+
   public static FeatureVector decodeFeatureVector(String str) {
     return decode(FeatureVector.class, str);
   }

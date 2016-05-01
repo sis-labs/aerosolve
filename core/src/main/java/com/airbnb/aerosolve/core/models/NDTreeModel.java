@@ -1,5 +1,6 @@
 package com.airbnb.aerosolve.core.models;
 
+import com.airbnb.aerosolve.core.NDTreeMap;
 import com.airbnb.aerosolve.core.NDTreeNode;
 import com.airbnb.aerosolve.core.util.Util;
 import com.google.common.base.Optional;
@@ -8,9 +9,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -177,5 +176,14 @@ public class NDTreeModel implements Serializable {
     } else {
       return node.rightChild;
     }
+  }
+
+  public static NDTreeMap load(BufferedReader reader) throws IOException {
+    return Util.load(NDTreeMap.class, reader);
+  }
+
+  public static void save(BufferedWriter writer, NDTreeMap map) throws IOException {
+    Util.save(writer, map);
+    writer.flush();
   }
 }
