@@ -4,8 +4,8 @@ import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamW
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
-import com.airbnb.aerosolve.core.{Example, FeatureVector}
-import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory}
+import com.airbnb.aerosolve.core.{Example, FeatureVector, NDTreeMap}
+import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory, NDTreeModel}
 import com.airbnb.aerosolve.core.transforms.Transformer
 import com.airbnb.aerosolve.core.util.{StringDictionary, Util}
 import com.typesafe.config.Config
@@ -63,6 +63,39 @@ object TrainingUtils {
     }
   }
 
+  // TODO should share saving code with saveModel
+  def saveNDTree(ndTreeMap: NDTreeMap, output: String): Unit = {
+    try {
+      val fileSystem = FileSystem.get(new java.net.URI(output),
+        new Configuration())
+      val file = fileSystem.create(new Path(output), true)
+      val writer = new BufferedWriter(new OutputStreamWriter(file))
+      NDTreeModel.save(writer, ndTreeMap)
+      writer.close()
+      file.close()
+    } catch {
+      case _ : Throwable => log.error("Could not save model")
+    }
+  }
+
+  def getReader(name: String): BufferedReader = {
+    val fs = FileSystem.get(new URI(name), hadoopConfiguration)
+    val modelPath = new Path(name)
+    if (!fs.exists(modelPath)) {
+      log.error(name + " does not exist")
+      System.exit(-1)
+    }
+    val modelStream = fs.open(modelPath)
+    return new BufferedReader(new InputStreamReader(modelStream))
+  }
+
+  def loadNDTree(name: String): NDTreeMap = {
+    val reader = getReader(name)
+    val map = NDTreeModel.load(reader)
+    reader.close()
+    map
+  }
+
   def saveModel(model: AbstractModel, output: String): Unit = {
     try {
       val fileSystem = FileSystem.get(new java.net.URI(output),
@@ -78,14 +111,7 @@ object TrainingUtils {
   }
 
   def loadScoreModel(modelName: String): Option[AbstractModel] = {
-    val fs = FileSystem.get(new URI(modelName), hadoopConfiguration)
-    val modelPath = new Path(modelName)
-    if (!fs.exists(modelPath)) {
-      log.error(modelName + " does not exist")
-      System.exit(-1)
-    }
-    val modelStream = fs.open(modelPath)
-    val reader = new BufferedReader(new InputStreamReader(modelStream))
+    val reader = getReader(modelName)
     val modelOpt = ModelFactory.createFromReader(reader)
     if (!modelOpt.isPresent) {
       return None
