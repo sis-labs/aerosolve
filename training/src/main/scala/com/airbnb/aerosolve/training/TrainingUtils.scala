@@ -90,9 +90,9 @@ object TrainingUtils {
     return new BufferedReader(new InputStreamReader(modelStream))
   }
 
-  def loadThrift[T](name: String, returnType: T): T = {
+  def loadThrift[T](name: String, clazz: Class[T]): T = {
     val reader = getReader(name)
-    val map = Util.load(classOf[T], reader)
+    val map = Util.load(clazz, reader)
     reader.close()
     map
   }

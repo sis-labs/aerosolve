@@ -369,12 +369,13 @@ object AdditiveModelTrainer {
                                             model : AdditiveModel,
                                             overwrite : Boolean) = {
     // load NDTree and feature family/name pairs
-    val featureMap = TrainingUtils.loadThrift(params.ndTreePath, FeatureMap)
-    //val nDTreeMap = TrainingUtils.loadNDTree(params.ndTreePath)
-    // filter minCount
-
+    val featureMap = TrainingUtils.loadThrift(params.ndTreePath, classOf[FeatureMap])
     // add spline
+    for ((family, features) <- featureMap.ndTreeFeatures) {
+      for ((featureName, ndTree) <- features) {
 
+      }
+    }
     // add string(linear)
     // add dense.
   }
