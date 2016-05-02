@@ -373,11 +373,17 @@ object AdditiveModelTrainer {
     // add spline
     for ((family, features) <- featureMap.ndTreeFeatures) {
       for ((featureName, ndTree) <- features) {
-
+        val mdSpline = new MultiDimensionSpline(ndTree)
+        model.addFunction(family, featureName, mdSpline, overwrite)
       }
     }
     // add string(linear)
-    // add dense.
+    for ((family, features) <- featureMap.strFeatures) {
+      for (featureName <- features) {
+        model.addFunction(family, featureName,
+          new Linear(1, 1), overwrite)
+      }
+    }
   }
 
   // Initializes the model
