@@ -324,7 +324,10 @@ object AdditiveModelTrainer {
     val initExamples = input.sample(false, params.subsample)
     if(initialModel.isDefined) {
       val newModel = initialModel.get.asInstanceOf[AdditiveModel]
-      initModel(params.minCount, params, initExamples, newModel, false)
+      if (params.ndTreePath.isEmpty) {
+        // if ndTree is used for dynamic bucketing, then just return loaded model.
+        initModel(params.minCount, params, initExamples, newModel, false)
+      }
       newModel
     } else {
       val newModel = new AdditiveModel()
