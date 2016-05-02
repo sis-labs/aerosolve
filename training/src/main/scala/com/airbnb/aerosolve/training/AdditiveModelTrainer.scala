@@ -368,11 +368,13 @@ object AdditiveModelTrainer {
                                             examples : RDD[Example],
                                             model : AdditiveModel,
                                             overwrite : Boolean) = {
-    // load NDTree
-
+    // load NDTree and feature family/name pairs
+    val featureMap = TrainingUtils.loadThrift(params.ndTreePath, FeatureMap)
+    //val nDTreeMap = TrainingUtils.loadNDTree(params.ndTreePath)
     // filter minCount
 
     // add spline
+
     // add string(linear)
     // add dense.
   }

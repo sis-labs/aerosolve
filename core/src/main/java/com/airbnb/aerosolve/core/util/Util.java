@@ -10,6 +10,7 @@ import com.airbnb.aerosolve.core.*;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
@@ -19,6 +20,7 @@ import java.io.*;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
 
+@Slf4j
 public class Util implements Serializable {
   private static double LOG2 = Math.log(2);
   // Coder / decoder utilities for various protos. This makes it easy to
@@ -32,6 +34,11 @@ public class Util implements Serializable {
     } catch (Exception e) {
       return "";
     }
+  }
+
+  public static void saveAndFlush(BufferedWriter writer, TBase obj) throws IOException {
+    Util.save(writer, obj);
+    writer.flush();
   }
 
   public static void save(BufferedWriter writer, TBase obj) throws IOException {

@@ -4,15 +4,16 @@ import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamW
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
-import com.airbnb.aerosolve.core.{Example, FeatureVector, NDTreeMap}
-import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory, NDTreeModel}
+import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory}
 import com.airbnb.aerosolve.core.transforms.Transformer
 import com.airbnb.aerosolve.core.util.{StringDictionary, Util}
+import com.airbnb.aerosolve.core.{Example, FeatureVector}
 import com.typesafe.config.Config
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.thrift.{TBase, TFieldIdEnum}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.JavaConversions._
@@ -63,14 +64,14 @@ object TrainingUtils {
     }
   }
 
-  // TODO should share saving code with saveModel
-  def saveNDTree(ndTreeMap: NDTreeMap, output: String): Unit = {
+  // Save any Thrift obj to output
+  def saveThrift(obj: TBase[_ <: TBase[_,_] ,_ <: TFieldIdEnum], output: String): Unit = {
     try {
       val fileSystem = FileSystem.get(new java.net.URI(output),
         new Configuration())
       val file = fileSystem.create(new Path(output), true)
       val writer = new BufferedWriter(new OutputStreamWriter(file))
-      NDTreeModel.save(writer, ndTreeMap)
+      Util.saveAndFlush(writer, obj)
       writer.close()
       file.close()
     } catch {
@@ -89,9 +90,9 @@ object TrainingUtils {
     return new BufferedReader(new InputStreamReader(modelStream))
   }
 
-  def loadNDTree(name: String): NDTreeMap = {
+  def loadThrift[T](name: String, returnType: T): T = {
     val reader = getReader(name)
-    val map = NDTreeModel.load(reader)
+    val map = Util.load(classOf[T], reader)
     reader.close()
     map
   }
@@ -224,6 +225,11 @@ object TrainingUtils {
     // get label for regression
     fv.floatFeatures.get(rankKey).asScala.head._2.toDouble
   }
+
+//  // return family/feature name pairs for more than minCount
+//  def filterFeature(minCount : Int, input : RDD[Example]) : Array[(String, String)] = {
+//
+//  }
 
   // Returns the statistics of a feature
   case class FeatureStatistics(count : Double,min : Double, max : Double, mean : Double, variance : Double)

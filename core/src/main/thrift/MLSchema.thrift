@@ -104,9 +104,12 @@ struct NDTreeNode {
   7: optional double splitValue;
 }
 
-// feature family : feature name : ndTree
-struct NDTreeMap {
-  1: optional map<string, map<string, list<NDTreeNode>>> ndTreeMap;
+// save features for training set
+struct FeatureMap {
+  // dynamic bucket features store in ndTreeFeatures
+  1: optional map<string, map<string, list<NDTreeNode>>> ndTreeFeatures;
+  // string feature store in
+  2: optional map<string, list<string>> strFeatures;
 }
 
 struct ModelRecord {
