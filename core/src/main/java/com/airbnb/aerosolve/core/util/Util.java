@@ -267,6 +267,49 @@ public class Util implements Serializable {
     return rankMap;
   }
 
+  public static  Map<String, List<Double>> flattenDense(
+      FeatureVector featureVector) {
+    if (featureVector.denseFeatures != null) {
+      return featureVector.denseFeatures;
+    }  else {
+      return Collections.EMPTY_MAP;
+    }
+  }
+
+  public static  Map<String, Set<String>> flattenString(
+      FeatureVector featureVector) {
+    if (featureVector.stringFeatures != null) {
+      return featureVector.stringFeatures;
+    }  else {
+      return Collections.EMPTY_MAP;
+    }
+  }
+
+
+  public static  Map<String, Map<String, Double>> flattenFloat(
+      FeatureVector featureVector) {
+    if (featureVector.floatFeatures != null) {
+      return featureVector.floatFeatures;
+    }  else {
+      return Collections.EMPTY_MAP;
+    }
+  }
+
+  private static  Map<String, Map<String, Double>> flattenFloat(
+      Map<String, Map<String, Double>> flatFeature,
+      FeatureVector featureVector) {
+    if (featureVector.floatFeatures != null) {
+      for (Map.Entry<String, Map<String, Double>> entry : featureVector.floatFeatures.entrySet()) {
+        Map<String, Double> out = new HashMap<>();
+        flatFeature.put(entry.getKey(), out);
+        for (Map.Entry<String, Double> feature : entry.getValue().entrySet()) {
+          out.put(feature.getKey(), feature.getValue());
+        }
+      }
+    }
+    return flatFeature;
+  }
+
   public static  Map<String, Map<String, Double>> flattenFeature(
       FeatureVector featureVector) {
     Map<String, Map<String, Double>> flatFeature = new HashMap<>();
@@ -279,15 +322,7 @@ public class Util implements Serializable {
         }
       }
     }
-    if (featureVector.floatFeatures != null) {
-      for (Map.Entry<String, Map<String, Double>> entry : featureVector.floatFeatures.entrySet()) {
-        Map<String, Double> out = new HashMap<>();
-        flatFeature.put(entry.getKey(), out);
-        for (Map.Entry<String, Double> feature : entry.getValue().entrySet()) {
-          out.put(feature.getKey(), feature.getValue());
-        }
-      }
-    }
+    flattenFloat(flatFeature, featureVector);
     return flatFeature;
   }
 
