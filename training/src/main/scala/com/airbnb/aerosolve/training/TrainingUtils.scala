@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 import com.airbnb.aerosolve.core.models.{AbstractModel, ModelFactory}
 import com.airbnb.aerosolve.core.transforms.Transformer
 import com.airbnb.aerosolve.core.util.{StringDictionary, Util}
-import com.airbnb.aerosolve.core.{Example, FeatureVector}
+import com.airbnb.aerosolve.core.{Example, FeatureMap, FeatureVector}
 import com.typesafe.config.Config
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -90,9 +90,9 @@ object TrainingUtils {
     return new BufferedReader(new InputStreamReader(modelStream))
   }
 
-  def loadThrift[T](name: String): T = {
+  def loadFeatureMapThrift(name: String): FeatureMap = {
     val reader = getReader(name)
-    val map = Util.load(classOf[T], reader)
+    val map = Util.load(classOf[FeatureMap], reader)
     reader.close()
     map
   }

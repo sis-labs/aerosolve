@@ -372,7 +372,7 @@ object AdditiveModelTrainer {
                                             model : AdditiveModel,
                                             overwrite : Boolean) = {
     // load NDTree and feature family/name pairs
-    val featureMap: FeatureMap = TrainingUtils.loadThrift(params.ndTreePath)
+    val featureMap: FeatureMap = TrainingUtils.loadFeatureMapThrift(params.ndTreePath)
     // add spline
     for ((family, features) <- featureMap.ndTreeFeatures) {
       for ((featureName, ndTree) <- features) {

@@ -1,50 +1,74 @@
 package com.airbnb.aerosolve.training.pipeline
 
-import com.airbnb.aerosolve.core.{Example, FeatureMap}
+import com.airbnb.aerosolve.core.Example
 import com.airbnb.aerosolve.core.util.Util
-import com.airbnb.aerosolve.training.{KDTree, TrainingUtils}
-import com.airbnb.aerosolve.training.KDTree.KDTreeBuildOptions
 import com.typesafe.config.Config
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.HiveContext
 import org.slf4j.{Logger, LoggerFactory}
-
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import collection.JavaConverters._
+import scala.util.Try
 
 object NDTreePipeline {
   val log: Logger = LoggerFactory.getLogger("NDTreePipeline")
 
   /*
-    build NDTree from examples, each float/dense feature generates a NDTree
-    and save to FeatureMap
-    Sample config
-    make_feature_map {
-      input :  ${training_data}
-      output:  ${feature_map}
-      sample: 0.01
-      min_count: 200
-    }
-   */
+      build NDTree from examples, each float/dense feature generates a NDTree
+      and save to FeatureMap
+      Sample config
+      make_feature_map {
+        input :  ${training_data}
+        output:  ${feature_map}
+        sample: 0.01
+        min_count: 200
+        // feature families in linear_feature should use linear
+        linear_feature: ["L", "T", "L_x_T"]
+      }
+     */
   def buildFeatureMapRun(sc: SparkContext, config : Config) = {
     val cfg = config.getConfig("make_feature_map")
     val inputPattern: String = cfg.getString("input")
     val sample : Double = cfg.getDouble("sample")
     val minCount : Int = config.getInt("min_count")
+    // minMax.filter(x => !linearFeatureFamilies.contains(x._1._1))
+    val linearFeatureFamilies: java.util.List[String] = Try(config.getStringList("linear_feature"))
+      .getOrElse[java.util.List[String]](List.empty.asJava)
 
-    log.info("Training data: %s".format(inputPattern))
-    val input = GenericPipeline.getExamples(sc, inputPattern).sample(false, sample).collect()
+    val linearFeatureFamiliesBC = sc.broadcast(linearFeatureFamilies)
 
-    val floatMap = examplesToFloatFeatureArray(input)
-    filter(floatMap, minCount)
-    val denseMap = examplesToDenseArray(input).retain((k, v) => v.length >= minCount)
-    val strMap = examplesToString(input, minCount)
-    val featureMap = new FeatureMap
-    featureMap.strFeatures = strMap.mapValues(_.asJava).asJava
-    val output = cfg.getString("output")
-    val hc = new HiveContext(sc)
-    TrainingUtils.saveThrift(featureMap, output)
+    log.info("Training data: ${inputPattern}")
+    val input = GenericPipeline.getExamples(sc, inputPattern).sample(false, sample)
+    input.mapPartitions(partition => {
+      val map =  mutable.Map[(String, String), ArrayBuffer[Double]]()
+      val linearFeatureFamilies = linearFeatureFamiliesBC.value
+      partition.foreach(examples => {
+        examplesToFloatFeatureArray(examples, linearFeatureFamilies, map)
+      })
+      map.iterator
+    })
+
+
+
+//      .map(examples => {
+//        val weights = mutable.Map[(String, String),ArrayBuffer[Double]]
+//        partition.foreach(examples => {
+//
+//        })
+//        weights
+//      })
+        //    log.info(s"sample load: ${input.length}")
+//
+//    val floatMap = examplesToFloatFeatureArray(input, linearFeatureFamilies)
+//    filter(floatMap, minCount)
+//    val denseMap = examplesToDenseArray(input).retain((k, v) => v.length >= minCount)
+//    val strMap = examplesToString(input, minCount)
+//    val featureMap = new FeatureMap
+//    featureMap.strFeatures = strMap.mapValues(_.asJava).asJava
+//    val output = cfg.getString("output")
+//    val hc = new HiveContext(sc)
+//    TrainingUtils.saveThrift(featureMap, output)
 
 //    val pts : Array[(Double, Double)] = hc.sql(query).map(row => (row.getDouble(0), row.getDouble(1))).collect
 //    log.info("Num listings = %d".format(pts.size))
@@ -59,22 +83,22 @@ object NDTreePipeline {
 //    log.info("Min count = %d max count = %d".format(minCount, maxCount))
   }
 
-  def examplesToString(input: Array[Example], minCount: Int): mutable.Map[String, mutable.Buffer[String]] = {
-    val map = mutable.Map[String, mutable.Map[String, Int]]()
-    for (example <- input) {
-      for (featureVector <- example.getExample) {
-        for ((family, features) <- Util.flattenString(featureVector)) {
-          for(name <- features) {
-            val familyMap = map.getOrElseUpdate(family, mutable.Map[String, Int]())
-            val value = familyMap.getOrElseUpdate(name, 0)
-            familyMap.put(name, value + 1)
-          }
-        }
-      }
-    }
-
-    filter(map, minCount)
-  }
+//  def examplesToString(input: Array[Example], minCount: Int): mutable.Map[String, mutable.Buffer[String]] = {
+//    val map = mutable.Map[String, mutable.Map[String, Int]]()
+//    for (example <- input) {
+//      for (featureVector <- example.getExample) {
+//        for ((family, features) <- Util.flattenString(featureVector)) {
+//          for(name <- features) {
+//            val familyMap = map.getOrElseUpdate(family, mutable.Map[String, Int]())
+//            val value = familyMap.getOrElseUpdate(name, 0)
+//            familyMap.put(name, value + 1)
+//          }
+//        }
+//      }
+//    }
+//
+//    filter(map, minCount)
+//  }
 
   def filter(map: mutable.Map[String, mutable.Map[String, Int]], minCount: Int):
       mutable.Map[String, ArrayBuffer[String]] = {
@@ -107,37 +131,38 @@ object NDTreePipeline {
 //    map.retain((k, v) => v.size > 0)
 //  }
 
-  def examplesToDenseArray(input: Array[Example]): mutable.Map[String, ArrayBuffer[ArrayBuffer[Double]]] = {
-    val map = mutable.Map[String, ArrayBuffer[ArrayBuffer[Double]]]()
-    for (example <- input) {
-      for (featureVector <- example.getExample) {
-        for ((name, feature) <- Util.flattenDense(featureVector)) {
-          val values = map.getOrElseUpdate(name, ArrayBuffer[ArrayBuffer[Double]]())
-          values += feature
-        }
-      }
-    }
-    map
-  }
+//  def examplesToDenseArray(input: Array[Example]): mutable.Map[String, ArrayBuffer[ArrayBuffer[Double]]] = {
+//    val map = mutable.Map[String, ArrayBuffer[ArrayBuffer[Double]]]()
+//    for (example <- input) {
+//      for (featureVector <- example.getExample) {
+//        for ((name, feature) <- Util.flattenDense(featureVector)) {
+//          val values = map.getOrElseUpdate(name, ArrayBuffer[ArrayBuffer[Double]]())
+//          values += feature
+//        }
+//      }
+//    }
+//    map
+//  }
 
   /*
     map can be millions of items, so just return mutable.Map
    */
-  def examplesToFloatFeatureArray(input: Array[Example]) :
-      mutable.Map[String, mutable.Map[String, ArrayBuffer[Double]]] = {
-    val map = mutable.Map[String, mutable.Map[String, ArrayBuffer[Double]]]()
-    for (example <- input) {
-      for (featureVector <- example.getExample) {
-        for ((family, features) <- Util.flattenFloat(featureVector)) {
-          for((name, value) <- features) {
-            val familyMap = map.getOrElseUpdate(family, mutable.Map[String, ArrayBuffer[Double]]())
-            val values = familyMap.getOrElseUpdate(name, ArrayBuffer[Double]())
-            values += value
-          }
+  def examplesToFloatFeatureArray(
+      example: Example, linearFeatureFamilies:java.util.List[String],
+      map: mutable.Map[(String, String), ArrayBuffer[Double]]): Unit = {
+    for (i <- 0 until example.getExample.size()) {
+      val featureVector = example.getExample.get(i)
+      val floatFeatures = Util.flattenFloat(featureVector).asScala
+      floatFeatures.foreach(familyMap => {
+        val family = familyMap._1
+        if (!linearFeatureFamilies.contains(family)) {
+          familyMap._2.foreach(feature => {
+            val values = map.getOrElseUpdate((family, feature._1), ArrayBuffer[Double]())
+            values += feature._2
+          })
         }
-      }
+      })
     }
-    map
   }
 
 }
