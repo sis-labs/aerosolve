@@ -15,23 +15,47 @@ class NDTreePipelineTest {
   @Test
   def examplesToFloatFeatureArray() = {
     val example: Example = TrainingTestHelper.makeExample(1, 2, 3)
-    val map =  mutable.Map[(String, String), ArrayBuffer[Double]]()
+    val map =  mutable.Map[(String, String), Any]()
     val emptyLinearFamilies: java.util.List[String] = List.empty.asJava
     NDTreePipeline.examplesToFloatFeatureArray(example, emptyLinearFamilies, map)
     assertEquals(3, map.size)
-    val b1: ArrayBuffer[Double] = map.get(("loc", "x")).get
+    val b1: ArrayBuffer[Double] = map.get(("loc", "x")).get.asInstanceOf[ArrayBuffer[Double]]
     assertEquals(1, b1(0), 0)
-    val b2: ArrayBuffer[Double] = map.get(("loc", "y")).get
+    val b2: ArrayBuffer[Double] = map.get(("loc", "y")).get.asInstanceOf[ArrayBuffer[Double]]
     assertEquals(2, b2(0), 0)
 
-    val b3: ArrayBuffer[Double] = map.get(("$rank", "")).get
+    val b3: ArrayBuffer[Double] = map.get(("$rank", "")).get.asInstanceOf[ArrayBuffer[Double]]
     assertEquals(3, b3(0), 0)
 
     val linearFamilies: java.util.List[String] = util.Arrays.asList("loc")
-    val map2 =  mutable.Map[(String, String), ArrayBuffer[Double]]()
+    val map2 =  mutable.Map[(String, String), Any]()
     NDTreePipeline.examplesToFloatFeatureArray(example, linearFamilies, map2)
     assertEquals(1, map2.size)
-    val b4: ArrayBuffer[Double] = map2.get(("$rank", "")).get
+    val b4: ArrayBuffer[Double] = map2.get(("$rank", "")).get.asInstanceOf[ArrayBuffer[Double]]
     assertEquals(3, b4(0), 0)
   }
+
+  @Test
+  def examplesToDenseFeatureArray() = {
+    val example: Example = TrainingTestHelper.makeExample(1, 2, 3)
+    val map =  mutable.Map[(String, String), Any]()
+    val emptyLinearFamilies: java.util.List[String] = List.empty.asJava
+    NDTreePipeline.examplesToFloatFeatureArray(example, emptyLinearFamilies, map)
+    assertEquals(3, map.size)
+    val b1: ArrayBuffer[Double] = map.get(("loc", "x")).get.asInstanceOf[ArrayBuffer[Double]]
+    assertEquals(1, b1(0), 0)
+    val b2: ArrayBuffer[Double] = map.get(("loc", "y")).get.asInstanceOf[ArrayBuffer[Double]]
+    assertEquals(2, b2(0), 0)
+
+    val b3: ArrayBuffer[Double] = map.get(("$rank", "")).get.asInstanceOf[ArrayBuffer[Double]]
+    assertEquals(3, b3(0), 0)
+
+    val linearFamilies: java.util.List[String] = util.Arrays.asList("loc")
+    val map2 =  mutable.Map[(String, String), Any]()
+    NDTreePipeline.examplesToFloatFeatureArray(example, linearFamilies, map2)
+    assertEquals(1, map2.size)
+    val b4: ArrayBuffer[Double] = map2.get(("$rank", "")).get.asInstanceOf[ArrayBuffer[Double]]
+    assertEquals(3, b4(0), 0)
+  }
+
 }

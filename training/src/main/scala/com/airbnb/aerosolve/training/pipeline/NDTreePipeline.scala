@@ -1,10 +1,12 @@
 package com.airbnb.aerosolve.training.pipeline
 
 import com.airbnb.aerosolve.core.Example
+import com.airbnb.aerosolve.core.models.AdditiveModel
 import com.airbnb.aerosolve.core.util.Util
 import com.typesafe.config.Config
 import org.apache.spark.SparkContext
 import org.slf4j.{Logger, LoggerFactory}
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -14,19 +16,20 @@ import scala.util.Try
 object NDTreePipeline {
   val log: Logger = LoggerFactory.getLogger("NDTreePipeline")
 
+
   /*
-      build NDTree from examples, each float/dense feature generates a NDTree
-      and save to FeatureMap
-      Sample config
-      make_feature_map {
-        input :  ${training_data}
-        output:  ${feature_map}
-        sample: 0.01
-        min_count: 200
-        // feature families in linear_feature should use linear
-        linear_feature: ["L", "T", "L_x_T"]
-      }
-     */
+        build NDTree from examples, each float/dense feature generates a NDTree
+        and save to FeatureMap
+        Sample config
+        make_feature_map {
+          input :  ${training_data}
+          output:  ${feature_map}
+          sample: 0.01
+          min_count: 200
+          // feature families in linear_feature should use linear
+          linear_feature: ["L", "T", "L_x_T"]
+        }
+       */
   def buildFeatureMapRun(sc: SparkContext, config : Config) = {
     val cfg = config.getConfig("make_feature_map")
     val inputPattern: String = cfg.getString("input")
@@ -41,10 +44,11 @@ object NDTreePipeline {
     log.info("Training data: ${inputPattern}")
     val input = GenericPipeline.getExamples(sc, inputPattern).sample(false, sample)
     input.mapPartitions(partition => {
-      val map =  mutable.Map[(String, String), ArrayBuffer[Double]]()
+      val map =  mutable.Map[(String, String), Any]()
       val linearFeatureFamilies = linearFeatureFamiliesBC.value
       partition.foreach(examples => {
         examplesToFloatFeatureArray(examples, linearFeatureFamilies, map)
+        examplesToDenseFeatureArray(examples, map)
       })
       map.iterator
     })
@@ -149,7 +153,7 @@ object NDTreePipeline {
    */
   def examplesToFloatFeatureArray(
       example: Example, linearFeatureFamilies:java.util.List[String],
-      map: mutable.Map[(String, String), ArrayBuffer[Double]]): Unit = {
+      map: mutable.Map[(String, String), Any]): Unit = {
     for (i <- 0 until example.getExample.size()) {
       val featureVector = example.getExample.get(i)
       val floatFeatures = Util.flattenFloat(featureVector).asScala
@@ -157,12 +161,30 @@ object NDTreePipeline {
         val family = familyMap._1
         if (!linearFeatureFamilies.contains(family)) {
           familyMap._2.foreach(feature => {
-            val values = map.getOrElseUpdate((family, feature._1), ArrayBuffer[Double]())
+            // dense feature should not be same family and feature name as float
+            val values:ArrayBuffer[Double] = map.getOrElseUpdate((family, feature._1), ArrayBuffer[Double]()).
+              asInstanceOf[ArrayBuffer[Double]]
             values += feature._2
           })
         }
       })
     }
+  }
+
+  def examplesToDenseFeatureArray(example: Example, map: mutable.Map[(String, String), Any]): Unit = {
+    for (i <- 0 until example.getExample.size()) {
+      val featureVector = example.getExample.get(i)
+      val denseFeatures = Util.flattenDense(featureVector).asScala
+      denseFeatures.foreach(feature => {
+        val family = feature._1
+        val values:ArrayBuffer[java.util.List[java.lang.Double]] =
+          map.getOrElseUpdate((AdditiveModel.DENSE_FAMILY, feature._1),
+          ArrayBuffer[java.util.List[java.lang.Double]]()).
+          asInstanceOf[ArrayBuffer[java.util.List[java.lang.Double]]]
+        values += feature._2
+      })
+    }
+
   }
 
 }
