@@ -33,16 +33,45 @@ object GenericPipeline {
   val LABEL = "LABEL"
   val DEFAULT_TRAINING_FRACTION = 0.9373 // 0.9373 = (255 - 16) / 255
 
-  def makeTrainingRun(sc: SparkContext, config: Config) = {
+  def makeExampleRun(sc: SparkContext, config: Config) = {
     val cfg = config.getConfig("make_training")
-    val query = cfg.getString("hive_query")
-    val output = cfg.getString("output")
+
     val numShards = cfg.getInt("num_shards")
     val isMulticlass = Try(cfg.getBoolean("is_multiclass")).getOrElse(false)
-    val training = makeTraining(sc, query, isMulticlass)
+    val shuffle = Try(cfg.getBoolean("shuffle")).getOrElse(true)
 
-    training
-      .coalesce(numShards, true)
+    val query = Try(cfg.getString("hive_query")).getOrElse("")
+    if (query.length() > 0) {
+      // This is for backward compatible of older version
+      val output = cfg.getString("output")
+      makeExamples(sc, query, output, numShards, isMulticlass, shuffle)
+    } else {
+      // This is the new version
+      val trainQuery = Try(cfg.getString("training_hive_query")).getOrElse("")
+      val trainOutput = Try(cfg.getString("training_output")).getOrElse("")
+
+      if (trainQuery.length > 0 && trainOutput.length > 0) {
+        makeExamples(sc, trainQuery, trainOutput, numShards, isMulticlass, shuffle)
+      }
+
+      val evalQuery = Try(cfg.getString("eval_hive_query")).getOrElse("")
+      val evalOutput = Try(cfg.getString("eval_output")).getOrElse("")
+
+      if (evalQuery.length > 0 && evalOutput.length > 0) {
+        makeExamples(sc, evalQuery, evalOutput, numShards, isMulticlass, shuffle)
+      }
+    }
+  }
+
+  def makeExamples(sc: SparkContext,
+                   query: String,
+                   output: String,
+                   numShards: Int,
+                   isMulticlass: Boolean,
+                   shuffle: Boolean) = {
+    val examples = makeTraining(sc, query, isMulticlass)
+    examples
+      .coalesce(numShards, shuffle)
       .map(Util.encode)
       .saveAsTextFile(output, classOf[GzipCodec])
   }
@@ -155,6 +184,7 @@ object GenericPipeline {
     val isRegression = Try(cfg.getBoolean("is_regression")).getOrElse(false)
     val isMulticlass = Try(cfg.getBoolean("is_multiclass")).getOrElse(false)
     val metric = cfg.getString("metric_to_maximize")
+    val resultsOutputPath = Try(cfg.getString("results_output_path")).getOrElse(null)
     val (model, transformer) = getModelAndTransform(config, modelCfgName, modelName)
 
     val metrics = evalModelInternal(
@@ -168,7 +198,8 @@ object GenericPipeline {
       isRegression,
       isMulticlass,
       metric,
-      isTraining
+      isTraining,
+      resultsOutputPath
     )
 
     metrics
@@ -446,7 +477,8 @@ object GenericPipeline {
       isRegression: Boolean,
       isMulticlass: Boolean,
       metric: String,
-      isTraining: Example => Boolean) : Array[(String, Double)] = {
+      isTraining: Example => Boolean,
+      resultsOutputPath: String) : Array[(String, Double)] = {
     val examples = sc.textFile(inputPattern)
       .map(Util.decodeExample)
       .sample(false, subSample)
@@ -469,7 +501,7 @@ object GenericPipeline {
     } else if (isMulticlass) {
       Evaluation.evaluateMulticlassClassification(records)
     } else {
-      Evaluation.evaluateBinaryClassification(records, bins, metric)
+      Evaluation.evaluateBinaryClassificationWithResults(records, bins, metric, resultsOutputPath)
     }
 
     records.unpersist()

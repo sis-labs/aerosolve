@@ -24,10 +24,13 @@ object NDTreePipeline {
   case class NDTreePipelineParams(sample: Double,
                                   minCount: Int,
                                   linearFeatureFamilies: util.List[String],
+                                  splineFeatureFamilies: util.List[String],
                                   checkPointDir: String,
                                   maxTreeDepth1Dimension: Int,
                                   maxTreeDepthPerDimension: Int,
-                                  minLeafCount: Int)
+                                  minLeafCount: Int,
+                                  minLeafCountPercent: Double,
+                                  minLeafValuePercent: Double)
 
   case class FeatureStats(count: Double, min: Double, max: Double,
                           spline: Boolean = false)
@@ -40,12 +43,20 @@ object NDTreePipeline {
       output:  ${feature_map}
       sample: 0.01
       min_count: 200
-      // max_tree_depth = max(max_tree_depth_1_dimension, max_tree_depth_per_dimension * dimension + 1)
-      max_tree_depth_1_dimension: 6  ( max nodes could be 2^(max_tree_depth) - 1 )
-      max_tree_depth_per_dimension: 4
-      min_leaf_count: 200
+      // max_tree_depth = max(max_tree_depth_1_dimension + 1, max_tree_depth_per_dimension * dimension + 1)
+      max_tree_depth_1_dimension: 6  ( max nodes could be 2^(max_tree_depth_1_dimension) )
+      max_tree_depth_per_dimension: 4( max nodes could be 2^(max_tree_depth_per_dimension * dimension) )
+      // default 1/2^(max single dimension depth(max_tree_depth_1_dimension or max_tree_depth_per_dimension) )
+      // if you set it to 0, it will be replaced with default value too.
+      min_leaf_value_percent: 0.01
+       // if you set it to 0, default value is 1/2^(max_tree_depth -1)
+      min_leaf_count_percent: 0.01
+      // the actual min_leaf_count = max(min_leaf_count, min_leaf_count_percent * total count)
+      min_leaf_count: 20
       // feature families in linear_feature should use linear
       linear_feature: ["L", "T", "L_x_T"]
+      // set feature families using spline
+      spline_feature: ["ds"]
       // if your job failed, try to set check_point to avoid rerun
       // and set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
       // clean checkpoint files if the reference is out of scope.
@@ -71,19 +82,26 @@ object NDTreePipeline {
   def getNDTreePipelineParams(cfg: Config): NDTreePipelineParams = {
     val linearFeatureFamilies: java.util.List[String] = Try(cfg.getStringList("linear_feature"))
       .getOrElse[java.util.List[String]](List.empty.asJava)
+    val splineFeatureFamilies: java.util.List[String] = Try(
+      cfg.getStringList("spline_feature"))
+      .getOrElse[java.util.List[String]](List.empty.asJava)
     val checkPointDir = Try(cfg.getString("check_point_dir")).getOrElse("")
     val maxTreeDepth1Dimension = cfg.getInt("max_tree_depth_1_dimension")
     val maxTreeDepthPerDimension = cfg.getInt("max_tree_depth_per_dimension")
-    val minLeafCount = cfg.getInt("min_leaf_count")
-
+    val minLeafCountPercent: Double = Try(cfg.getDouble("min_leaf_count_percent")).getOrElse(0)
+    val minLeafValuePercent: Double = Try(cfg.getDouble("min_leaf_value_percent")).getOrElse(0)
+    val minLeafCount: Int = Try(cfg.getInt("min_leaf_count")).getOrElse(0)
     NDTreePipelineParams(
       cfg.getDouble("sample"),
       cfg.getInt("min_count"),
       linearFeatureFamilies,
+      splineFeatureFamilies,
       checkPointDir,
       maxTreeDepth1Dimension,
       maxTreeDepthPerDimension,
-      minLeafCount)
+      minLeafCount,
+      minLeafCountPercent,
+      minLeafValuePercent)
   }
 
   def buildFeatures(sc: SparkContext, config : Config):
@@ -101,10 +119,9 @@ object NDTreePipeline {
 
   def getFeatures(sc: SparkContext, input: RDD[Example], params: NDTreePipelineParams):
                   Array[((String, String), Either[Array[NDTreeNode], FeatureStats])] = {
-    val paramsBC = sc.broadcast(params)
     val featureRDD: RDD[((String, String), Either[ArrayBuffer[Array[Double]], FeatureStats])] =
       input.mapPartitions(partition => {
-        flattenExample(partition, paramsBC.value.linearFeatureFamilies)
+        flattenExample(partition, params)
     }).reduceByKey((a, b) => {
         val result = a match {
           case Left(x) => {
@@ -115,7 +132,7 @@ object NDTreePipeline {
             val bs = b.right.get
             Right(FeatureStats(y.count + bs.count,
               scala.math.min(y.min, bs.min),
-              scala.math.max(y.max, bs.max)))
+              scala.math.max(y.max, bs.max), y.spline))
           }
         }
         result
@@ -123,15 +140,15 @@ object NDTreePipeline {
         val a = x._2
         a match {
           case Left(x) => {
-            x.size >= paramsBC.value.minCount
+            x.size >= params.minCount
           }
           case Right(y) => {
-            y.count >= paramsBC.value.minCount
+            y.count >= params.minCount
           }
         }
       })
-    if (!paramsBC.value.checkPointDir.isEmpty) {
-      sc.setCheckpointDir(paramsBC.value.checkPointDir)
+    if (!params.checkPointDir.isEmpty) {
+      sc.setCheckpointDir(params.checkPointDir)
       featureRDD.checkpoint()
     }
 
@@ -145,16 +162,28 @@ object NDTreePipeline {
             // FloatToDense transform make sure all array in y are same size.
             // so we just pick first one to get the dimension
             val dimension = y(0).length
-            val minLeafWidthPercentage: Double = if (dimension == 1) {
-              1.0/scala.math.pow(2, paramsBC.value.maxTreeDepth1Dimension)
+
+            val minLeafValuePercent: Double = if (params.minLeafValuePercent != 0) {
+              params.minLeafValuePercent
+            } else if (dimension == 1) {
+              1.0/scala.math.pow(2, params.maxTreeDepth1Dimension + 1)
             } else {
-              1.0/scala.math.pow(2, paramsBC.value.maxTreeDepthPerDimension)
+              1.0/scala.math.pow(2, params.maxTreeDepthPerDimension + 1)
             }
+
+            val minLeafCountPercent: Double = if (params.minLeafCountPercent != 0) {
+              params.minLeafCountPercent
+            } else if (dimension == 1) {
+              1.0/scala.math.pow(2, params.maxTreeDepth1Dimension + 1)
+            } else {
+              1.0/scala.math.pow(2, params.maxTreeDepthPerDimension * dimension + 1)
+            }
+
             val options = NDTreeBuildOptions(
-              math.max(paramsBC.value.maxTreeDepth1Dimension + 1,
-                paramsBC.value.maxTreeDepthPerDimension * dimension + 1),
-                paramsBC.value.minLeafCount,
-                minLeafWidthPercentage)
+              math.max(params.maxTreeDepth1Dimension + 1,
+                params.maxTreeDepthPerDimension * dimension + 1),
+                math.max(params.minLeafCount, (minLeafCountPercent * y.length).toInt),
+                minLeafValuePercent)
 
               ((x._1._1, x._1._2), Left(NDTree.buildTree(options, y.toArray)))
           }
@@ -164,18 +193,17 @@ object NDTreePipeline {
         }
         result
     }).collect
-    paramsBC.unpersist()
 
     log.info(s"tree length ${tree.length}")
     tree
   }
 
   def flattenExample(partition: Iterator[Example],
-                     linearFeatureFamilies: java.util.List[String])
+                     params: NDTreePipelineParams)
                   : Iterator[((String, String), Either[ArrayBuffer[Array[Double]], FeatureStats])] = {
     val map = mutable.Map[(String, String), Either[ArrayBuffer[Array[Double]], FeatureStats]]()
     partition.foreach(examples => {
-      examplesToFloatFeatureArray(examples, linearFeatureFamilies, map)
+      examplesToFloatFeatureArray(examples, params, map)
       examplesToDenseFeatureArray(examples, map)
       examplesToStringFeatureArray(examples, map)
     })
@@ -199,23 +227,30 @@ object NDTreePipeline {
     }
   }
 
-  def examplesToFloatFeatureArray(example: Example, linearFeatureFamilies:java.util.List[String],
+  def examplesToFloatFeatureArray(example: Example,
+                                  params: NDTreePipelineParams,
                                   map: mutable.Map[(String, String),
-                                    Either[ArrayBuffer[Array[Double]], FeatureStats]]): Unit = {
+                                  Either[ArrayBuffer[Array[Double]], FeatureStats]]): Unit = {
+    val linearFeatureFamilies = params.linearFeatureFamilies
+    val splineFeatureFamilies = params.splineFeatureFamilies
     for (i <- 0 until example.getExample.size()) {
       val featureVector = example.getExample.get(i)
       val floatFeatures = Util.safeMap(featureVector.floatFeatures).asScala
       floatFeatures.foreach(familyMap => {
         val family = familyMap._1
-        if (linearFeatureFamilies.contains(family)) {
+        val isLinear = linearFeatureFamilies.contains(family)
+        val isSpline = splineFeatureFamilies.contains(family)
+        if (isLinear || isSpline) {
           familyMap._2.foreach(feature => {
             val key = (family, feature._1)
             val stats =  map.getOrElseUpdate(key,
               Right(FeatureStats(0, Double.MaxValue, Double.MinValue))).right.get
             val v = feature._2
-            map.put(key, Right(FeatureStats(stats.count + 1,
+            map.put(key, Right(FeatureStats(
+              stats.count + 1,
               scala.math.min(stats.min, v),
-              scala.math.max(stats.max, v))))
+              scala.math.max(stats.max, v),
+              isSpline)))
           })
         } else if (family.compare(GenericPipeline.LABEL) != 0) {
           familyMap._2.foreach(feature => {

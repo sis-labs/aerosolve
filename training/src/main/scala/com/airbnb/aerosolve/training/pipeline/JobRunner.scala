@@ -2,6 +2,7 @@ package com.airbnb.aerosolve.training.pipeline
 
 import java.io.File
 
+import com.airbnb.aerosolve.training.photon.ml.data.ConvertExamplesToPhotonMLAvroJob
 import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigResolveOptions}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -47,7 +48,7 @@ object JobRunner extends Logging {
       try {
         job match {
           case "GenericMakeExamples" => GenericPipeline
-            .makeTrainingRun(sc, config)
+            .makeExampleRun(sc, config)
           case "GenericDebugExamples" => GenericPipeline
             .debugExampleRun(sc, config)
           case "GenericDebugTransforms" => GenericPipeline
@@ -64,6 +65,7 @@ object JobRunner extends Logging {
             .evalRun(sc, config, "eval_model_calibrated")
           case "GenericDumpModel" => GenericPipeline
             .dumpModelRun(sc, config)
+          case "DumpModelToHive" => ModelDebug.dumpModelForHive(sc, config)
           case "GenericDumpForest" => GenericPipeline
             .dumpForestRun(sc, config)
           case "GenericDumpFullRankLinearModel" => GenericPipeline
@@ -73,6 +75,8 @@ object JobRunner extends Logging {
           case "GenericParamSearch" => GenericPipeline
             .paramSearch(sc, config)
           case "NDTreeBuildFeatureMap" => NDTreePipeline.buildFeatureMapRun(sc, config)
+          case "ConvertExampleToPhotonMLAvro" => ConvertExamplesToPhotonMLAvroJob
+            .convertExamplesToPhotonGAMEAvro(sc, config)
           case _ => log.error("Unknown job " + job)
         }
       } catch {

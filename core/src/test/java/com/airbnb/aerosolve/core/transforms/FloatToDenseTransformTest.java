@@ -35,7 +35,7 @@ public class FloatToDenseTransformTest {
         "}";
   }
 
-  public FeatureVector makeFeatureVectorFull() {
+  public static FeatureVector makeFeatureVectorFull() {
     Map<String, Map<String, Double>> floatFeatures = new HashMap<>();
 
     Map<String, Double> floatFeature1 = new HashMap<>();
@@ -57,7 +57,7 @@ public class FloatToDenseTransformTest {
     return featureVector;
   }
 
-  public FeatureVector makeFeatureVectorMissFamily() {
+  public static FeatureVector makeFeatureVectorMissFamily() {
     Map<String, Map<String, Double>> floatFeatures = new HashMap<>();
 
     Map<String, Double> floatFeature1 = new HashMap<>();
@@ -150,7 +150,7 @@ public class FloatToDenseTransformTest {
     assertNotNull(denseFeatures);
     assertEquals(1, denseFeatures.size());
 
-    List<Double> out = denseFeatures.get("^x^y^z");
+    List<Double> out = denseFeatures.get("x^y^z");
 
     assertEquals(3, out.size());
 
@@ -164,15 +164,7 @@ public class FloatToDenseTransformTest {
     FeatureVector featureVector = testTransform(makeFeatureVectorMissFamily());
     Map<String, List<Double>> denseFeatures = featureVector.getDenseFeatures();
 
-    assertNotNull(denseFeatures);
-    assertEquals(1, denseFeatures.size());
-
-    List<Double> out = denseFeatures.get("^x^y^z:null");
-
-    assertEquals(2, out.size());
-
-    assertEquals(50.0, out.get(0), 0.01);
-    assertEquals(1.3, out.get(1), 0.01);
+    assertNull(denseFeatures);
   }
 
   @Test
@@ -180,15 +172,7 @@ public class FloatToDenseTransformTest {
     FeatureVector featureVector = testTransform(makeFeatureVectorPartial());
     Map<String, List<Double>> denseFeatures = featureVector.getDenseFeatures();
 
-    assertNotNull(denseFeatures);
-    assertEquals(1, denseFeatures.size());
-
-    List<Double> out = denseFeatures.get("^x^y:null^z");
-
-    assertEquals(2, out.size());
-
-    assertEquals(50.0, out.get(0), 0.01);
-    assertEquals(2000, out.get(1), 0.01);
+    assertNull(denseFeatures);
   }
 
   @Test
@@ -201,23 +185,7 @@ public class FloatToDenseTransformTest {
 
     Map<String, Double> out = features.get("floatFeature1");
 
-    assertEquals(3, out.size());
-
-    assertEquals(50.0, out.get("^x^y:null^z:null"), 0.01);
-  }
-
-  @Test
-  public void testString() {
-    FeatureVector featureVector = testTransform(makeFeatureVectorString());
-    Map<String, Set<String>> features = featureVector.getStringFeatures();
-
-    assertNotNull(features);
-    assertEquals(1, features.size());
-
-    Set<String> out = features.get("string");
-
-    assertEquals(1, out.size());
-    assertTrue(out.contains("^x:null^y:null^z:null"));
+    assertEquals(2, out.size());
   }
 
   @Test
@@ -232,7 +200,7 @@ public class FloatToDenseTransformTest {
     return testTransform(featureVector, makeConfig());
   }
 
-  public FeatureVector testTransform(FeatureVector featureVector, String cfg) {
+  public static FeatureVector testTransform(FeatureVector featureVector, String cfg) {
     Config config = ConfigFactory.parseString(cfg);
     Transform transform = TransformFactory.createTransform(config, "test_float_cross_float");
     transform.doTransform(featureVector);

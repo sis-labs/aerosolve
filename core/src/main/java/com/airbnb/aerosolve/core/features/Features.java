@@ -14,6 +14,7 @@ import java.util.*;
 
 @Builder @Slf4j
 public class Features {
+  // lower case label field will be inserted into Upper case LABEL family name.
   public final static String LABEL = "LABEL";
   public final static String LABEL_FEATURE_NAME = "";
   public final static String MISS = "MISS";
@@ -53,9 +54,6 @@ public class Features {
   // TODO  make it more generic, for example, taking care of dense feature
   public Example toExample(boolean isMultiClass) {
     assert (names.length == values.length);
-    if (names.length != values.length) {
-      throw new RuntimeException("names.length != values.length");
-    }
     Example example = new Example();
     FeatureVector featureVector = new FeatureVector();
     example.addToExample(featureVector);
@@ -124,7 +122,7 @@ public class Features {
     String family = getStringFamily(featurePair);
     Set<String> feature = Util.getOrCreateStringFeature(family, stringFeatures);
     String featureName = featurePair.getRight();
-    char str = (b.booleanValue()) ? TRUE_FEATURE : FALSE_FEATURE;
+    char str = b ? TRUE_FEATURE : FALSE_FEATURE;
     feature.add(featureName + STRING_FEATURE_SEPARATOR + str);
   }
 
@@ -176,7 +174,7 @@ public class Features {
   static Pair<String, String> getFamily(String name) {
     int pos = name.indexOf(FAMILY_SEPARATOR);
     if (pos == -1) {
-      if (name.compareTo(LABEL) == 0) {
+      if (name.compareToIgnoreCase(LABEL) == 0) {
         return new ImmutablePair<>(LABEL, LABEL_FEATURE_NAME) ;
       } else if (!name.isEmpty()){
         return new ImmutablePair<>("", name) ;

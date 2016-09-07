@@ -23,6 +23,41 @@ class NDTreeTest {
     points
   }
 
+  def get2DNotEvenlyDistributed(): ArrayBuffer[Array[Double]] = {
+    val points = ArrayBuffer[Array[Double]]()
+
+    for (x <- 1 to 10) {
+      for (y <- 1 to x) {
+        for (z <- 1 to y) {
+          points.append(Array[Double](y.toDouble, z.toDouble))
+        }
+      }
+    }
+    points
+  }
+
+  @Test
+  def buildTree2DNotEvenlyDistributed: Unit = {
+    val points:ArrayBuffer[Array[Double]] = get2DNotEvenlyDistributed()
+
+    val dimensions = points.head.length
+
+    val options = NDTreeBuildOptions(
+      maxTreeDepth = 16,
+      minLeafCount = 10,
+      splitType = SplitType.Median)
+
+    val tree = NDTree(options, points.toArray)
+    val nodes = tree.nodes
+
+    log.debug(s"2dnodes = ${nodes.mkString("\n")}")
+    assertEquals(23, nodes.length)
+    assertEquals(5.5, nodes(0).splitValue, 0)
+    assertEquals(5.5, nodes(2).min.get(0), 0)
+    assertEquals(2.0, nodes(1).splitValue, 0)
+    assertEquals(5.0, nodes(1).max.get(1))
+  }
+
   @Test
   def getNextAxis: Unit = {
     val node = new NDTreeNode()
@@ -48,7 +83,7 @@ class NDTreeTest {
     val options = NDTreeBuildOptions(
       maxTreeDepth,
       minLeafCount = 10,
-      minLeafWidthPercentage = 1.0 / scala.math.pow(2, maxTreeDepth),
+      minLeafValuePercent = 1.0 / scala.math.pow(2, maxTreeDepth),
       splitType = SplitType.Median)
 
     val tree = NDTree(options, points.toArray)
@@ -277,7 +312,7 @@ class NDTreeTest {
     val options = NDTreeBuildOptions(
       maxTreeDepth = 6,
       minLeafCount = 30,
-      minLeafWidthPercentage = 0.05,
+      minLeafValuePercent = 0.05,
       splitType = SplitType.Median)
 
     val tree = NDTree(options, points.toArray)
